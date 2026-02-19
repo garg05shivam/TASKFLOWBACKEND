@@ -2,11 +2,10 @@ const authService = require("../services/auth.service");
 
 const register = async (req, res) => {
   try {
-    const user = await authService.registerUser(req.body);
+    const result = await authService.registerUser(req.body);
     res.status(201).json({
       success: true,
-      message: "User registered successfully",
-      user,
+      ...result,
     });
   } catch (error) {
     res.status(400).json({
@@ -21,8 +20,22 @@ const login = async (req, res) => {
     const result = await authService.loginUser(req.body);
     res.status(200).json({
       success: true,
-      token: result.token,
-      user: result.user,
+      ...result,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const verify = async (req, res) => {
+  try {
+    const result = await authService.verifyOtp(req.body);
+    res.status(200).json({
+      success: true,
+      ...result,
     });
   } catch (error) {
     res.status(400).json({
@@ -35,4 +48,5 @@ const login = async (req, res) => {
 module.exports = {
   register,
   login,
+  verify,   
 };
