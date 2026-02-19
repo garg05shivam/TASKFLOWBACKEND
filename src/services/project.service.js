@@ -1,6 +1,7 @@
 const Project = require("../models/project.model");
+const AppError = require("../utils/appError");
 
-
+// ================= CREATE PROJECT =================
 const createProject = async (data, userId) => {
   const project = await Project.create({
     name: data.name,
@@ -11,41 +12,57 @@ const createProject = async (data, userId) => {
   return project;
 };
 
-const getProjects = async (user) => {
-  if (user.role === "admin") {
-    return await Project.find().populate("owner", "name email");
+
+// ================= GET ALL PROJECTS (WITH SEARCH) =================
+const getProjects = async (user, query) => {
+  const { search } = query;
+
+  let filter = {};
+
+  if (user.role !== "admin") {
+    filter.owner = user._id;
   }
 
-  return await Project.find({ owner: user._id });
+  if (search) {
+    filter.name = { $regex: search, $options: "i" };
+  }
+
+  return await Project.find(filter).populate("owner", "name email");
 };
 
 
+// ================= GET PROJECT BY ID =================
 const getProjectById = async (id, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   return project;
 };
 
 
+// ================= UPDATE PROJECT =================
 const updateProject = async (id, data, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   project.name = data.name || project.name;
@@ -57,16 +74,19 @@ const updateProject = async (id, data, user) => {
 };
 
 
+// ================= DELETE PROJECT =================
 const deleteProject = async (id, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   await project.deleteOne();

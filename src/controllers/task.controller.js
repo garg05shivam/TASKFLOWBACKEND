@@ -1,15 +1,11 @@
-const projectService = require("../services/project.service");
+const taskService = require("../services/task.service");
 
 const create = async (req, res, next) => {
   try {
-    const project = await projectService.createProject(
-      req.body,
-      req.user._id
-    );
-
+    const task = await taskService.createTask(req.body, req.user);
     res.status(201).json({
       success: true,
-      project,
+      task,
     });
   } catch (error) {
     next(error);
@@ -18,30 +14,10 @@ const create = async (req, res, next) => {
 
 const getAll = async (req, res, next) => {
   try {
-    const projects = await projectService.getProjects(
-      req.user,
-      req.query
-    );
-
+    const result = await taskService.getTasks(req.query, req.user);
     res.status(200).json({
       success: true,
-      projects,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getOne = async (req, res, next) => {
-  try {
-    const project = await projectService.getProjectById(
-      req.params.id,
-      req.user
-    );
-
-    res.status(200).json({
-      success: true,
-      project,
+      ...result,
     });
   } catch (error) {
     next(error);
@@ -50,7 +26,7 @@ const getOne = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const project = await projectService.updateProject(
+    const task = await taskService.updateTask(
       req.params.id,
       req.body,
       req.user
@@ -58,7 +34,7 @@ const update = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      project,
+      task,
     });
   } catch (error) {
     next(error);
@@ -67,7 +43,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    const result = await projectService.deleteProject(
+    const result = await taskService.deleteTask(
       req.params.id,
       req.user
     );
@@ -84,7 +60,6 @@ const remove = async (req, res, next) => {
 module.exports = {
   create,
   getAll,
-  getOne,
   update,
   remove,
 };
