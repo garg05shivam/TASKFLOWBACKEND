@@ -1,45 +1,59 @@
 const taskService = require("../services/task.service");
 
-const create = async (req, res) => {
+const create = async (req, res, next) => {
   try {
     const task = await taskService.createTask(req.body, req.user);
-    res.status(201).json({ success: true, task });
+    res.status(201).json({
+      success: true,
+      task,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const getAll = async (req, res) => {
+const getAll = async (req, res, next) => {
   try {
     const result = await taskService.getTasks(req.query, req.user);
-    res.json({ success: true, ...result });
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const update = async (req, res) => {
+const update = async (req, res, next) => {
   try {
     const task = await taskService.updateTask(
       req.params.id,
       req.body,
       req.user
     );
-    res.json({ success: true, task });
+
+    res.status(200).json({
+      success: true,
+      task,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const remove = async (req, res) => {
+const remove = async (req, res, next) => {
   try {
     const result = await taskService.deleteTask(
       req.params.id,
       req.user
     );
-    res.json({ success: true, ...result });
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 

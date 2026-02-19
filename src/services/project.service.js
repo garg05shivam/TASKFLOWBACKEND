@@ -1,6 +1,7 @@
 const Project = require("../models/project.model");
+const AppError = require("../utils/appError");
 
-
+//  CREATE PROJECT
 const createProject = async (data, userId) => {
   const project = await Project.create({
     name: data.name,
@@ -11,6 +12,8 @@ const createProject = async (data, userId) => {
   return project;
 };
 
+
+//  GET ALL PROJECTS 
 const getProjects = async (user) => {
   if (user.role === "admin") {
     return await Project.find().populate("owner", "name email");
@@ -20,32 +23,38 @@ const getProjects = async (user) => {
 };
 
 
+//  GET PROJECT BY ID 
 const getProjectById = async (id, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   return project;
 };
 
 
+//  UPDATE PROJECT 
 const updateProject = async (id, data, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   project.name = data.name || project.name;
@@ -57,22 +66,26 @@ const updateProject = async (id, data, user) => {
 };
 
 
+// DELETE PROJECT 
 const deleteProject = async (id, user) => {
   const project = await Project.findById(id);
 
-  if (!project) throw new Error("Project not found");
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   if (
     user.role !== "admin" &&
     project.owner.toString() !== user._id.toString()
   ) {
-    throw new Error("Access denied");
+    throw new AppError("Access denied", 403);
   }
 
   await project.deleteOne();
 
   return { message: "Project deleted successfully" };
 };
+
 
 module.exports = {
   createProject,

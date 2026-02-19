@@ -1,42 +1,51 @@
 const projectService = require("../services/project.service");
 
-const create = async (req, res) => {
+const create = async (req, res, next) => {
   try {
     const project = await projectService.createProject(
       req.body,
       req.user._id
     );
 
-    res.status(201).json({ success: true, project });
+    res.status(201).json({
+      success: true,
+      project,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const getAll = async (req, res) => {
+const getAll = async (req, res, next) => {
   try {
     const projects = await projectService.getProjects(req.user);
 
-    res.json({ success: true, projects });
+    res.status(200).json({
+      success: true,
+      projects,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const getOne = async (req, res) => {
+const getOne = async (req, res, next) => {
   try {
     const project = await projectService.getProjectById(
       req.params.id,
       req.user
     );
 
-    res.json({ success: true, project });
+    res.status(200).json({
+      success: true,
+      project,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const update = async (req, res) => {
+const update = async (req, res, next) => {
   try {
     const project = await projectService.updateProject(
       req.params.id,
@@ -44,22 +53,28 @@ const update = async (req, res) => {
       req.user
     );
 
-    res.json({ success: true, project });
+    res.status(200).json({
+      success: true,
+      project,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 
-const remove = async (req, res) => {
+const remove = async (req, res, next) => {
   try {
     const result = await projectService.deleteProject(
       req.params.id,
       req.user
     );
 
-    res.json({ success: true, ...result });
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    next(error);
   }
 };
 

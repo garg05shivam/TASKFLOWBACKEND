@@ -31,6 +31,9 @@ app.use("/api/projects", projectRoutes);
 const taskRoutes = require("./routes/task.routes");
 app.use("/api/tasks", taskRoutes);
 
+const errorHandler = require("./middlewares/error.middleware");
+app.use(errorHandler);
+
 app.use(limiter);
 
 app.get("/", (req, res) => {
