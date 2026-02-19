@@ -25,6 +25,8 @@ const testRoutes = require("./routes/test.routes");
 app.use("/api/test", testRoutes);
 const authRoutes = require("./routes/auth.routes");
 app.use("/api/auth", authRoutes);
+const projectRoutes = require("./routes/project.routes");
+app.use("/api/projects", projectRoutes);
 
 app.use(limiter);
 
