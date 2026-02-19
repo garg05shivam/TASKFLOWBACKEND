@@ -68,6 +68,7 @@ const validate = require("../middlewares/validation.middleware");
 
 const {
   createTaskValidation,
+  taskIdValidation,
   updateTaskValidation,
   taskQueryValidation,
 } = require("../utils/task.validation");
@@ -110,7 +111,7 @@ router.put(
 router.delete(
   "/:id",
   protect,
-  updateTaskValidation,
+  taskIdValidation,
   validate,
   remove
 );
