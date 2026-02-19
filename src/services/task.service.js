@@ -2,7 +2,7 @@ const Task = require("../models/task.model");
 const Project = require("../models/project.model");
 const AppError = require("../utils/appError");
 
-//  CREATE TASK 
+// ================= CREATE TASK =================
 const createTask = async (data, user) => {
   const project = await Project.findById(data.project);
 
@@ -27,9 +27,9 @@ const createTask = async (data, user) => {
 };
 
 
-//  GET TASKS (FILTER + PAGINATION) 
+// ================= GET TASKS (FILTER + PAGINATION + SEARCH) =================
 const getTasks = async (query, user) => {
-  const { project, status, page = 1, limit = 5 } = query;
+  const { project, status, page = 1, limit = 5, search } = query;
 
   const projectData = await Project.findById(project);
 
@@ -50,6 +50,10 @@ const getTasks = async (query, user) => {
     filter.status = status;
   }
 
+  if (search) {
+    filter.title = { $regex: search, $options: "i" };
+  }
+
   const pageNumber = parseInt(page);
   const limitNumber = parseInt(limit);
 
@@ -68,7 +72,7 @@ const getTasks = async (query, user) => {
 };
 
 
-//  UPDATE TASK 
+// ================= UPDATE TASK =================
 const updateTask = async (id, data, user) => {
   const task = await Task.findById(id).populate("project");
 
@@ -93,7 +97,7 @@ const updateTask = async (id, data, user) => {
 };
 
 
-// DELETE TASK 
+// ================= DELETE TASK =================
 const deleteTask = async (id, user) => {
   const task = await Task.findById(id).populate("project");
 
@@ -112,7 +116,6 @@ const deleteTask = async (id, user) => {
 
   return { message: "Task deleted successfully" };
 };
-
 
 module.exports = {
   createTask,

@@ -18,7 +18,10 @@ const create = async (req, res, next) => {
 
 const getAll = async (req, res, next) => {
   try {
-    const projects = await projectService.getProjects(req.user);
+    const projects = await projectService.getProjects(
+      req.user,
+      req.query
+    );
 
     res.status(200).json({
       success: true,

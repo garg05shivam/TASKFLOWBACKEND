@@ -1,7 +1,7 @@
 const Project = require("../models/project.model");
 const AppError = require("../utils/appError");
 
-//  CREATE PROJECT
+// ================= CREATE PROJECT =================
 const createProject = async (data, userId) => {
   const project = await Project.create({
     name: data.name,
@@ -13,17 +13,25 @@ const createProject = async (data, userId) => {
 };
 
 
-//  GET ALL PROJECTS 
-const getProjects = async (user) => {
-  if (user.role === "admin") {
-    return await Project.find().populate("owner", "name email");
+// ================= GET ALL PROJECTS (WITH SEARCH) =================
+const getProjects = async (user, query) => {
+  const { search } = query;
+
+  let filter = {};
+
+  if (user.role !== "admin") {
+    filter.owner = user._id;
   }
 
-  return await Project.find({ owner: user._id });
+  if (search) {
+    filter.name = { $regex: search, $options: "i" };
+  }
+
+  return await Project.find(filter).populate("owner", "name email");
 };
 
 
-//  GET PROJECT BY ID 
+// ================= GET PROJECT BY ID =================
 const getProjectById = async (id, user) => {
   const project = await Project.findById(id);
 
@@ -42,7 +50,7 @@ const getProjectById = async (id, user) => {
 };
 
 
-//  UPDATE PROJECT 
+// ================= UPDATE PROJECT =================
 const updateProject = async (id, data, user) => {
   const project = await Project.findById(id);
 
@@ -66,7 +74,7 @@ const updateProject = async (id, data, user) => {
 };
 
 
-// DELETE PROJECT 
+// ================= DELETE PROJECT =================
 const deleteProject = async (id, user) => {
   const project = await Project.findById(id);
 
@@ -85,7 +93,6 @@ const deleteProject = async (id, user) => {
 
   return { message: "Project deleted successfully" };
 };
-
 
 module.exports = {
   createProject,
