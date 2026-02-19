@@ -28,6 +28,9 @@ app.use("/api/auth", authRoutes);
 const projectRoutes = require("./routes/project.routes");
 app.use("/api/projects", projectRoutes);
 
+const taskRoutes = require("./routes/task.routes");
+app.use("/api/tasks", taskRoutes);
+
 app.use(limiter);
 
 app.get("/", (req, res) => {
