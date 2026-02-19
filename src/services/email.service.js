@@ -37,9 +37,10 @@ const buildTransport = () => {
 
 const sendOtpEmail = async (email, otp) => {
   const transporter = buildTransport();
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
 
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: sender,
     to: email,
     subject: "Taskflow Email Verification OTP",
     text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
