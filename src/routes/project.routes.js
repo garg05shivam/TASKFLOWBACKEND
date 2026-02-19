@@ -1,3 +1,16 @@
+/**
+ * @swagger
+ * /api/projects:
+ *   get:
+ *     summary: Get all projects
+ *     tags: [Projects]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of projects
+ */
+
 const express = require("express");
 const router = express.Router();
 
