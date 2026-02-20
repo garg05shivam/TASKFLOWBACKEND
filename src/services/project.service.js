@@ -1,7 +1,7 @@
 const Project = require("../models/project.model");
 const AppError = require("../utils/appError");
 
-// ================= CREATE PROJECT =================
+//  CREATE PROJECT 
 const createProject = async (data, userId) => {
   const project = await Project.create({
     name: data.name,
@@ -13,7 +13,7 @@ const createProject = async (data, userId) => {
 };
 
 
-// ================= GET ALL PROJECTS (WITH SEARCH) =================
+// GET ALL PROJECTS (WITH SEARCH) 
 const getProjects = async (user, query) => {
   const { search } = query;
 
@@ -31,7 +31,7 @@ const getProjects = async (user, query) => {
 };
 
 
-// ================= GET PROJECT BY ID =================
+// GET PROJECT BY ID
 const getProjectById = async (id, user) => {
   const project = await Project.findById(id);
 
@@ -50,7 +50,7 @@ const getProjectById = async (id, user) => {
 };
 
 
-// ================= UPDATE PROJECT =================
+//UPDATE PROJECT 
 const updateProject = async (id, data, user) => {
   const project = await Project.findById(id);
 
