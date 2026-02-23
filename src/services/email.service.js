@@ -1,22 +1,89 @@
 const nodemailer = require("nodemailer");
+const AppError = require("../utils/appError");
 
-const sendOtpEmail = async (email, otp) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
+const RETRYABLE_CODES = new Set(["ETIMEDOUT", "ESOCKET", "ECONNECTION", "ECONNRESET"]);
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const buildTransport = () => {
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    family: 4,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 30000,
   });
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Taskflow Email Verification OTP",
-    text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
-  };
-
-  await transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendOtpEmail };
+const sendMailWithRetry = async (mailOptions, contextLabel) => {
+  let lastError;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const transporter = buildTransport();
+
+    try {
+      await transporter.verify();
+      await transporter.sendMail(mailOptions);
+      return;
+    } catch (error) {
+      lastError = error;
+
+      console.error("MAIL ERROR:", {
+        context: contextLabel,
+        attempt,
+        message: error.message,
+        code: error.code,
+        response: error.response,
+        command: error.command,
+      });
+
+      if (!RETRYABLE_CODES.has(error.code) || attempt === 3) {
+        break;
+      }
+
+      await delay(2500);
+    }
+  }
+
+  throw new AppError(
+    `Failed to send ${contextLabel} email${lastError?.code ? ` (${lastError.code})` : ""}`,
+    500
+  );
+};
+
+const sendOtpEmail = async (email, otp) => {
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  await sendMailWithRetry(
+    {
+      from: sender,
+      to: email,
+      subject: "Taskflow Email Verification OTP",
+      text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
+    },
+    "otp"
+  );
+};
+
+const sendProjectInviteEmail = async ({ email, inviterName, projectName, acceptUrl }) => {
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  const safeInviter = inviterName || "A teammate";
+
+  await sendMailWithRetry(
+    {
+      from: sender,
+      to: email,
+      subject: `Invitation to join ${projectName} on TaskFlow`,
+      text: `${safeInviter} invited you to join the project "${projectName}".\n\nAccept invite: ${acceptUrl}\n\nThis link expires in 24 hours.`,
+    },
+    "invite"
+  );
+};
+
+module.exports = { sendOtpEmail, sendProjectInviteEmail };

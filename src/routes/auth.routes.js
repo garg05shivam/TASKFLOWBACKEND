@@ -25,15 +25,18 @@
 
 const express = require("express");
 const router = express.Router();
-const { register, login } = require("../controllers/auth.controller");
+const { register, login, verify, resend } = require("../controllers/auth.controller");
 const validate = require("../middlewares/validation.middleware");
-const { verify } = require("../controllers/auth.controller");
 const {
   registerValidation,
   loginValidation,
+  verifyOtpValidation,
+  resendOtpValidation,
 } = require("../utils/auth.validation");
 
-router.post("/verify", verify);
+router.post("/verify", verifyOtpValidation, validate, verify);
+router.post("/verify-otp", verifyOtpValidation, validate, verify);
+router.post("/resend-otp", resendOtpValidation, validate, resend);
 router.post("/register", registerValidation, validate, register);
 router.post("/login", loginValidation, validate, login);
 

@@ -12,6 +12,18 @@ const create = async (req, res, next) => {
   }
 };
 
+const getOne = async (req, res, next) => {
+  try {
+    const task = await taskService.getTaskById(req.params.id, req.user);
+    res.status(200).json({
+      success: true,
+      task,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getAll = async (req, res, next) => {
   try {
     const result = await taskService.getTasks(req.query, req.user);
@@ -26,11 +38,7 @@ const getAll = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const task = await taskService.updateTask(
-      req.params.id,
-      req.body,
-      req.user
-    );
+    const task = await taskService.updateTask(req.params.id, req.body, req.user);
 
     res.status(200).json({
       success: true,
@@ -43,10 +51,7 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    const result = await taskService.deleteTask(
-      req.params.id,
-      req.user
-    );
+    const result = await taskService.deleteTask(req.params.id, req.user);
 
     res.status(200).json({
       success: true,
@@ -59,6 +64,7 @@ const remove = async (req, res, next) => {
 
 module.exports = {
   create,
+  getOne,
   getAll,
   update,
   remove,

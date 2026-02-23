@@ -1,6 +1,6 @@
 const authService = require("../services/auth.service");
 
-const register = async (req, res) => {
+const register = async (req, res, next) => {
   try {
     const result = await authService.registerUser(req.body);
     res.status(201).json({
@@ -8,14 +8,11 @@ const register = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
-const login = async (req, res) => {
+const login = async (req, res, next) => {
   try {
     const result = await authService.loginUser(req.body);
     res.status(200).json({
@@ -23,14 +20,11 @@ const login = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
-const verify = async (req, res) => {
+const verify = async (req, res, next) => {
   try {
     const result = await authService.verifyOtp(req.body);
     res.status(200).json({
@@ -38,15 +32,25 @@ const verify = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
+    next(error);
+  }
+};
+
+const resend = async (req, res, next) => {
+  try {
+    const result = await authService.resendOtp(req.body);
+    res.status(200).json({
+      success: true,
+      ...result,
     });
+  } catch (error) {
+    next(error);
   }
 };
 
 module.exports = {
   register,
   login,
-  verify,   
+  verify,
+  resend,
 };
