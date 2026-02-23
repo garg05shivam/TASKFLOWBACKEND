@@ -1,5 +1,21 @@
 const mongoose = require("mongoose");
 
+const attachmentSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
 const taskSchema = new mongoose.Schema(
   {
     title: {
@@ -15,6 +31,19 @@ const taskSchema = new mongoose.Schema(
       type: String,
       enum: ["todo", "in-progress", "done"],
       default: "todo",
+    },
+    dueDate: {
+      type: Date,
+      default: null,
+    },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    attachments: {
+      type: [attachmentSchema],
+      default: [],
     },
     project: {
       type: mongoose.Schema.Types.ObjectId,

@@ -3,8 +3,7 @@ const projectService = require("../services/project.service");
 const create = async (req, res, next) => {
   try {
     const project = await projectService.createProject(
-      req.body,
-      req.user._id
+      req.body, req.user._id, req.user.role
     );
 
     res.status(201).json({
@@ -88,3 +87,4 @@ module.exports = {
   update,
   remove,
 };
+

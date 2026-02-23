@@ -22,16 +22,7 @@ const buildTransport = () => {
   });
 };
 
-const sendOtpEmail = async (email, otp) => {
-  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-
-  const mailOptions = {
-    from: sender,
-    to: email,
-    subject: "Taskflow Email Verification OTP",
-    text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
-  };
-
+const sendMailWithRetry = async (mailOptions, contextLabel) => {
   let lastError;
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -45,6 +36,7 @@ const sendOtpEmail = async (email, otp) => {
       lastError = error;
 
       console.error("MAIL ERROR:", {
+        context: contextLabel,
         attempt,
         message: error.message,
         code: error.code,
@@ -61,9 +53,37 @@ const sendOtpEmail = async (email, otp) => {
   }
 
   throw new AppError(
-    `Failed to send OTP email${lastError?.code ? ` (${lastError.code})` : ""}`,
+    `Failed to send ${contextLabel} email${lastError?.code ? ` (${lastError.code})` : ""}`,
     500
   );
 };
 
-module.exports = { sendOtpEmail };
+const sendOtpEmail = async (email, otp) => {
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  await sendMailWithRetry(
+    {
+      from: sender,
+      to: email,
+      subject: "Taskflow Email Verification OTP",
+      text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
+    },
+    "otp"
+  );
+};
+
+const sendProjectInviteEmail = async ({ email, inviterName, projectName, acceptUrl }) => {
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  const safeInviter = inviterName || "A teammate";
+
+  await sendMailWithRetry(
+    {
+      from: sender,
+      to: email,
+      subject: `Invitation to join ${projectName} on TaskFlow`,
+      text: `${safeInviter} invited you to join the project "${projectName}".\n\nAccept invite: ${acceptUrl}\n\nThis link expires in 24 hours.`,
+    },
+    "invite"
+  );
+};
+
+module.exports = { sendOtpEmail, sendProjectInviteEmail };

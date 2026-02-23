@@ -12,10 +12,7 @@ const app = express();
 // DB connection
 connectDB();
 
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  process.env.CLIENT_URL_2,
-].filter(Boolean);
+const allowedOrigins = [process.env.CLIENT_URL, process.env.CLIENT_URL_2].filter(Boolean);
 
 // Middlewares
 app.use(express.json({ limit: "1mb" }));
@@ -42,16 +39,20 @@ app.use(limiter);
 
 const testRoutes = require("./routes/test.routes");
 app.use("/api/test", testRoutes);
+
 const authRoutes = require("./routes/auth.routes");
 app.use("/api/auth", authRoutes);
+
 const projectRoutes = require("./routes/project.routes");
 app.use("/api/projects", projectRoutes);
 
 const taskRoutes = require("./routes/task.routes");
 app.use("/api/tasks", taskRoutes);
 
-const { swaggerUi, specs } = require("./config/swagger");
+const collaborationRoutes = require("./routes/collaboration.routes");
+app.use("/api/collaboration", collaborationRoutes);
 
+const { swaggerUi, specs } = require("./config/swagger");
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 
 app.get("/", (req, res) => {
