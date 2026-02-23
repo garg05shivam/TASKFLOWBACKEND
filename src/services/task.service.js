@@ -2,6 +2,10 @@ const Task = require("../models/task.model");
 const Project = require("../models/project.model");
 const AppError = require("../utils/appError");
 
+const canAccessProject = (user, ownerId) => {
+  return user.role === "admin" || ownerId.toString() === user._id.toString();
+};
+
 // ================= CREATE TASK =================
 const createTask = async (data, user) => {
   const project = await Project.findById(data.project);
@@ -10,10 +14,7 @@ const createTask = async (data, user) => {
     throw new AppError("Project not found", 404);
   }
 
-  if (
-    user.role !== "admin" &&
-    project.owner.toString() !== user._id.toString()
-  ) {
+  if (!canAccessProject(user, project.owner)) {
     throw new AppError("Access denied", 403);
   }
 
@@ -26,6 +27,20 @@ const createTask = async (data, user) => {
   return task;
 };
 
+// ================= GET TASK BY ID =================
+const getTaskById = async (id, user) => {
+  const task = await Task.findById(id).populate("project");
+
+  if (!task) {
+    throw new AppError("Task not found", 404);
+  }
+
+  if (!canAccessProject(user, task.project.owner)) {
+    throw new AppError("Access denied", 403);
+  }
+
+  return task;
+};
 
 // ================= GET TASKS (FILTER + PAGINATION + SEARCH) =================
 const getTasks = async (query, user) => {
@@ -37,10 +52,7 @@ const getTasks = async (query, user) => {
     throw new AppError("Project not found", 404);
   }
 
-  if (
-    user.role !== "admin" &&
-    projectData.owner.toString() !== user._id.toString()
-  ) {
+  if (!canAccessProject(user, projectData.owner)) {
     throw new AppError("Access denied", 403);
   }
 
@@ -54,10 +66,11 @@ const getTasks = async (query, user) => {
     filter.title = { $regex: search, $options: "i" };
   }
 
-  const pageNumber = parseInt(page);
-  const limitNumber = parseInt(limit);
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
 
   const tasks = await Task.find(filter)
+    .sort({ createdAt: -1 })
     .skip((pageNumber - 1) * limitNumber)
     .limit(limitNumber);
 
@@ -71,7 +84,6 @@ const getTasks = async (query, user) => {
   };
 };
 
-
 // ================= UPDATE TASK =================
 const updateTask = async (id, data, user) => {
   const task = await Task.findById(id).populate("project");
@@ -80,10 +92,7 @@ const updateTask = async (id, data, user) => {
     throw new AppError("Task not found", 404);
   }
 
-  if (
-    user.role !== "admin" &&
-    task.project.owner.toString() !== user._id.toString()
-  ) {
+  if (!canAccessProject(user, task.project.owner)) {
     throw new AppError("Access denied", 403);
   }
 
@@ -96,7 +105,6 @@ const updateTask = async (id, data, user) => {
   return task;
 };
 
-
 // ================= DELETE TASK =================
 const deleteTask = async (id, user) => {
   const task = await Task.findById(id).populate("project");
@@ -105,10 +113,7 @@ const deleteTask = async (id, user) => {
     throw new AppError("Task not found", 404);
   }
 
-  if (
-    user.role !== "admin" &&
-    task.project.owner.toString() !== user._id.toString()
-  ) {
+  if (!canAccessProject(user, task.project.owner)) {
     throw new AppError("Access denied", 403);
   }
 
@@ -119,6 +124,7 @@ const deleteTask = async (id, user) => {
 
 module.exports = {
   createTask,
+  getTaskById,
   getTasks,
   updateTask,
   deleteTask,

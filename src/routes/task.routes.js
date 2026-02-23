@@ -34,31 +34,6 @@
  *       200:
  *         description: List of tasks
  */
-/**
- * @swagger
- * /api/tasks:
- *   post:
- *     summary: Create a task
- *     tags: [Tasks]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *               project:
- *                 type: string
- *     responses:
- *       201:
- *         description: Task created
- */
 
 const express = require("express");
 const router = express.Router();
@@ -75,45 +50,25 @@ const {
 
 const {
   create,
+  getOne,
   getAll,
   update,
   remove,
 } = require("../controllers/task.controller");
 
 // Create Task
-router.post(
-  "/",
-  protect,
-  createTaskValidation,
-  validate,
-  create
-);
+router.post("/", protect, createTaskValidation, validate, create);
 
 // Get Tasks (with filtering + pagination)
-router.get(
-  "/",
-  protect,
-  taskQueryValidation,
-  validate,
-  getAll
-);
+router.get("/", protect, taskQueryValidation, validate, getAll);
+
+// Get single task
+router.get("/:id", protect, taskIdValidation, validate, getOne);
 
 // Update Task
-router.put(
-  "/:id",
-  protect,
-  updateTaskValidation,
-  validate,
-  update
-);
+router.put("/:id", protect, updateTaskValidation, validate, update);
 
 // Delete Task
-router.delete(
-  "/:id",
-  protect,
-  taskIdValidation,
-  validate,
-  remove
-);
+router.delete("/:id", protect, taskIdValidation, validate, remove);
 
 module.exports = router;
