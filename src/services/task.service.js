@@ -1,5 +1,6 @@
 const Task = require("../models/task.model");
 const Project = require("../models/project.model");
+const Activity = require("../models/activity.model");
 const AppError = require("../utils/appError");
 const {
   canAccessProject,
@@ -8,6 +9,20 @@ const {
   projectAudienceUserIds,
   recordActivity,
 } = require("./collaboration.service");
+
+const getAccessibleProjectIdsForAnalytics = async (user) => {
+  if (user.role === "user") {
+    return await Task.distinct("project", { assignedTo: user._id });
+  }
+
+  return await Project.distinct("_id", {
+    $or: [
+      { owner: user._id },
+      { members: user._id },
+      { invitations: { $elemMatch: { email: String(user.email || "").toLowerCase(), status: "accepted" } } },
+    ],
+  });
+};
 
 const normalizeAssignee = (project, assignedTo) => {
   if (assignedTo === undefined) {
@@ -104,7 +119,7 @@ const createTask = async (data, user) => {
 };
 
 const getTasks = async (query, user) => {
-  const { project, status, page = 1, limit = 5, search } = query;
+  const { project, assignedTo, status, page = 1, limit = 5, search } = query;
 
   const projectData = await Project.findById(project).populate("owner members", "name email role");
 
@@ -117,9 +132,18 @@ const getTasks = async (query, user) => {
   }
 
   const filter = { project };
+  const requestedAssignee = assignedTo ? String(assignedTo) : null;
+  const currentUserId = String(user._id);
 
   if (status) {
     filter.status = status;
+  }
+
+  if (user.role === "user") {
+    // Members should only receive their own assigned tasks.
+    filter.assignedTo = currentUserId;
+  } else if (requestedAssignee) {
+    filter.assignedTo = requestedAssignee;
   }
 
   if (search) {
@@ -164,6 +188,8 @@ const updateTask = async (id, data, user) => {
 
   const previousDue = task.dueDate ? new Date(task.dueDate).getTime() : null;
 
+  const previousAssignee = String(task.assignedTo || "");
+
   if (data.title !== undefined) task.title = data.title;
   if (data.description !== undefined) task.description = data.description;
   if (data.status !== undefined) task.status = data.status;
@@ -173,6 +199,12 @@ const updateTask = async (id, data, user) => {
   const assignee = normalizeAssignee(task.project, data.assignedTo);
   if (assignee.hasValue) {
     task.assignedTo = assignee.value;
+  }
+
+  const assigneeChanged = assignee.hasValue && String(task.assignedTo || "") !== previousAssignee;
+  if (data.dueDate !== undefined || assigneeChanged) {
+    task.dueReminderSentAt = null;
+    task.overdueReminderSentAt = null;
   }
 
   await task.save();
@@ -255,8 +287,128 @@ const deleteTask = async (id, user) => {
   return { message: "Task deleted successfully" };
 };
 
+const completeTaskByAssignee = async (id, user) => {
+  const task = await Task.findById(id).populate({
+    path: "project",
+    populate: [
+      { path: "owner", select: "name email role" },
+      { path: "members", select: "name email role" },
+    ],
+  });
+
+  if (!task) {
+    throw new AppError("Task not found", 404);
+  }
+
+  if (!canAccessProject(task.project, user)) {
+    throw new AppError("Access denied", 403);
+  }
+
+  const assignedUserId = String(task.assignedTo || "");
+  if (!assignedUserId || assignedUserId !== String(user._id)) {
+    throw new AppError("Only assigned user can mark this task done", 403);
+  }
+
+  const taskTitle = task.title;
+  const projectId = task.project._id;
+  const ownerId = task.project.owner?._id || task.project.owner;
+
+  await recordActivity({
+    projectId,
+    actorId: user._id,
+    action: "completed task",
+    entityType: "task",
+    entityId: task._id,
+    metadata: { title: taskTitle },
+  });
+
+  await notifyUsers({
+    userIds: [ownerId],
+    projectId,
+    type: "activity",
+    message: `${user.name || user.email} completed task "${taskTitle}". Task was removed.`,
+    metadata: { taskId: String(task._id), completedBy: String(user._id) },
+  });
+
+  await task.deleteOne();
+
+  return { message: "Task marked done and removed" };
+};
+
+const getDashboardAnalytics = async (user) => {
+  const projectIds = await getAccessibleProjectIdsForAnalytics(user);
+  if (!projectIds.length) {
+    return {
+      completedThisWeek: 0,
+      overdueCount: 0,
+      assigneeWorkload: [],
+    };
+  }
+
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - 6);
+
+  const completedThisWeek = await Activity.countDocuments({
+    project: { $in: projectIds },
+    action: "completed task",
+    createdAt: { $gte: weekStart, $lte: now },
+  });
+
+  const overdueCount = await Task.countDocuments({
+    project: { $in: projectIds },
+    status: { $ne: "done" },
+    dueDate: { $ne: null, $lt: now },
+  });
+
+  const workloadRows = await Task.aggregate([
+    {
+      $match: {
+        project: { $in: projectIds },
+        status: { $ne: "done" },
+        assignedTo: { $ne: null },
+      },
+    },
+    {
+      $group: {
+        _id: "$assignedTo",
+        openTasks: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "assignee",
+      },
+    },
+    { $unwind: "$assignee" },
+    { $sort: { openTasks: -1 } },
+    { $limit: 20 },
+    {
+      $project: {
+        _id: 0,
+        assigneeId: "$_id",
+        name: "$assignee.name",
+        email: "$assignee.email",
+        openTasks: 1,
+      },
+    },
+  ]);
+
+  return {
+    completedThisWeek,
+    overdueCount,
+    assigneeWorkload: workloadRows,
+  };
+};
+
 module.exports = {
+  completeTaskByAssignee,
   createTask,
+  getDashboardAnalytics,
   getTaskById,
   getTasks,
   updateTask,

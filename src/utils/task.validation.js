@@ -44,6 +44,22 @@ const updateTaskValidation = [
 
 const taskQueryValidation = [
   query("project").isMongoId().withMessage("Invalid project ID"),
+  query("assignedTo")
+    .optional()
+    .isMongoId()
+    .withMessage("assignedTo must be a valid user ID"),
+  query("status")
+    .optional()
+    .isIn(["todo", "in-progress", "done"])
+    .withMessage("Invalid task status"),
+  query("page").optional().isInt({ min: 1 }).withMessage("Page must be a positive integer"),
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage("Limit must be between 1 and 100"),
+];
+
+const myAssignedTaskQueryValidation = [
   query("status")
     .optional()
     .isIn(["todo", "in-progress", "done"])
@@ -57,6 +73,7 @@ const taskQueryValidation = [
 
 module.exports = {
   createTaskValidation,
+  myAssignedTaskQueryValidation,
   taskIdValidation,
   updateTaskValidation,
   taskQueryValidation,

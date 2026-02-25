@@ -156,6 +156,11 @@ const markNotificationRead = async (notificationId, userId) => {
   return updated;
 };
 
+const clearAllNotifications = async (userId) => {
+  const result = await Notification.deleteMany({ user: userId });
+  return { deletedCount: result.deletedCount || 0 };
+};
+
 module.exports = {
   acceptInvitation,
   addMember,
@@ -165,6 +170,7 @@ module.exports = {
   getNotifications,
   getProjectMessages,
   getTaskComments,
+  clearAllNotifications,
   markNotificationRead,
   removeMember,
   sendProjectMessage,

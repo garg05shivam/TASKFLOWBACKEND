@@ -1,5 +1,6 @@
 const Project = require("../models/project.model");
 const User = require("../models/user.model");
+const Task = require("../models/task.model");
 const crypto = require("crypto");
 const AppError = require("../utils/appError");
 const { sendProjectInviteEmail } = require("./email.service");
@@ -11,6 +12,37 @@ const {
   projectAudienceUserIds,
   recordActivity,
 } = require("./collaboration.service");
+
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+
+const reconcileAcceptedInvitesWithMembers = async (project) => {
+  if (!project) return project;
+
+  const acceptedEmails = [
+    ...new Set(
+      (project.invitations || [])
+        .filter((item) => item.status === "accepted")
+        .map((item) => normalizeEmail(item.email))
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!acceptedEmails.length) return project;
+
+  const users = await User.find({ email: { $in: acceptedEmails } }).select("_id email");
+  if (!users.length) return project;
+
+  const memberIds = new Set((project.members || []).map((member) => String(member._id || member)));
+  const missingUsers = users.filter((u) => !memberIds.has(String(u._id)));
+  if (!missingUsers.length) return project;
+
+  missingUsers.forEach((u) => project.members.push(u._id));
+  await project.save();
+
+  return await Project.findById(project._id)
+    .populate("owner", "name email")
+    .populate("members", "name email role");
+};
 
 const createProject = async (data, userId, userRole) => {
   if (userRole !== "admin") {
@@ -38,12 +70,35 @@ const createProject = async (data, userId, userRole) => {
 
 const getProjects = async (user, query) => {
   const { search } = query;
+  const userEmail = normalizeEmail(user?.email);
 
-  let filter = {};
+  // Self-heal legacy records: if invite is accepted for this email, ensure user is a member.
+  if (userEmail) {
+    await Project.updateMany(
+      { invitations: { $elemMatch: { email: userEmail, status: "accepted" } } },
+      { $addToSet: { members: user._id } }
+    );
+  }
 
-  if (user.role !== "admin") {
+  let filter = {
+    $or: [
+      { owner: user._id },
+      { members: user._id },
+      { invitations: { $elemMatch: { email: userEmail, status: "accepted" } } },
+    ],
+  };
+
+  if (user.role === "user") {
+    const assignedProjectIds = await Task.distinct("project", { assignedTo: user._id });
+    if (!assignedProjectIds.length) {
+      return [];
+    }
+
     filter = {
-      $or: [{ owner: user._id }, { members: user._id }],
+      $and: [
+        filter,
+        { _id: { $in: assignedProjectIds } },
+      ],
     };
   }
 
@@ -60,13 +115,15 @@ const getProjects = async (user, query) => {
 };
 
 const getProjectById = async (id, user) => {
-  const project = await Project.findById(id)
+  let project = await Project.findById(id)
     .populate("owner", "name email")
     .populate("members", "name email role");
 
   if (!project) {
     throw new AppError("Project not found", 404);
   }
+
+  project = await reconcileAcceptedInvitesWithMembers(project);
 
   if (!canAccessProject(project, user)) {
     throw new AppError("Access denied", 403);
@@ -118,7 +175,7 @@ const addMemberByEmail = async (projectId, email, user) => {
     throw new AppError("Only project admin can invite members", 403);
   }
 
-  const normalized = String(email || "").trim().toLowerCase();
+  const normalized = normalizeEmail(email);
   if (!normalized) {
     throw new AppError("Member email is required", 400);
   }
@@ -132,7 +189,9 @@ const addMemberByEmail = async (projectId, email, user) => {
   const token = crypto.randomBytes(24).toString("hex");
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-  project.invitations = (project.invitations || []).filter((invite) => invite.email !== normalized);
+  project.invitations = (project.invitations || []).filter(
+    (invite) => normalizeEmail(invite.email) !== normalized
+  );
   project.invitations.push({
     email: normalized,
     invitedBy: user._id,
@@ -166,12 +225,34 @@ const addMemberByEmail = async (projectId, email, user) => {
 
 const getProjectMembers = async (projectId, user) => {
   const project = await getProjectById(projectId, user);
-  const safeInvitations = (project.invitations || []).map((item) => ({
-    email: item.email,
-    status: item.status,
-    expiresAt: item.expiresAt,
-    acceptedAt: item.acceptedAt || null,
-  }));
+  const memberEmailSet = new Set(
+    (project.members || [])
+      .map((member) => normalizeEmail(member?.email))
+      .filter(Boolean)
+  );
+
+  const invitationMap = new Map();
+  (project.invitations || []).forEach((item) => {
+    const email = normalizeEmail(item.email);
+    if (!email) return;
+
+    const derivedStatus =
+      item.status === "accepted" || memberEmailSet.has(email) ? "accepted" : "pending";
+
+    const normalizedItem = {
+      email,
+      status: derivedStatus,
+      expiresAt: item.expiresAt,
+      acceptedAt: item.acceptedAt || null,
+    };
+
+    const existing = invitationMap.get(email);
+    if (!existing || (existing.status !== "accepted" && normalizedItem.status === "accepted")) {
+      invitationMap.set(email, normalizedItem);
+    }
+  });
+
+  const safeInvitations = Array.from(invitationMap.values());
 
   return {
     owner: project.owner,
@@ -211,7 +292,9 @@ const acceptInvitationByToken = async (token, user) => {
     throw new AppError("Invitation token is required", 400);
   }
 
-  const project = await Project.findOne({ "invitations.token": cleanToken });
+  const project = await Project.findOne({ "invitations.token": cleanToken }).select(
+    "_id name owner invitations members"
+  );
   if (!project) {
     throw new AppError("Invitation not found", 404);
   }
@@ -221,7 +304,17 @@ const acceptInvitationByToken = async (token, user) => {
     throw new AppError("Invitation not found", 404);
   }
 
+  const invitedEmail = normalizeEmail(invitation.email);
+  const currentUserEmail = normalizeEmail(user.email);
+  if (invitedEmail !== currentUserEmail) {
+    throw new AppError("This invitation is for a different email account", 403);
+  }
+
   if (invitation.status !== "pending") {
+    if (invitation.status === "accepted") {
+      await Project.updateOne({ _id: project._id }, { $addToSet: { members: user._id } });
+      return { projectId: project._id, message: "Invitation already accepted" };
+    }
     throw new AppError("Invitation already used", 400);
   }
 
@@ -229,20 +322,61 @@ const acceptInvitationByToken = async (token, user) => {
     throw new AppError("Invitation expired", 400);
   }
 
-  if (String(invitation.email).toLowerCase() !== String(user.email).toLowerCase()) {
-    throw new AppError("This invitation is for a different email account", 403);
+  const acceptedAt = new Date();
+
+  await Project.updateOne(
+    { _id: project._id, "invitations.token": cleanToken },
+    {
+      $addToSet: { members: user._id },
+      $set: {
+        "invitations.$.status": "accepted",
+        "invitations.$.acceptedBy": user._id,
+        "invitations.$.acceptedAt": acceptedAt,
+      },
+    }
+  );
+
+  await Project.updateOne(
+    { _id: project._id },
+    {
+      $set: {
+        "invitations.$[pendingForEmail].status": "accepted",
+        "invitations.$[pendingForEmail].acceptedBy": user._id,
+        "invitations.$[pendingForEmail].acceptedAt": acceptedAt,
+      },
+    },
+    {
+      arrayFilters: [
+        {
+          "pendingForEmail.email": invitedEmail,
+          "pendingForEmail.status": "pending",
+        },
+      ],
+    }
+  );
+
+  const refreshedProject = await Project.findById(project._id);
+  if (refreshedProject) {
+    let changed = false;
+    (refreshedProject.invitations || []).forEach((item) => {
+      if (normalizeEmail(item.email) === invitedEmail && item.status === "pending") {
+        item.status = "accepted";
+        item.acceptedBy = user._id;
+        item.acceptedAt = acceptedAt;
+        changed = true;
+      }
+    });
+
+    const memberIds = new Set((refreshedProject.members || []).map((id) => String(id)));
+    if (!memberIds.has(String(user._id))) {
+      refreshedProject.members.push(user._id);
+      changed = true;
+    }
+
+    if (changed) {
+      await refreshedProject.save();
+    }
   }
-
-  const memberIds = new Set((project.members || []).map((id) => String(id)));
-  if (!memberIds.has(String(user._id))) {
-    project.members.push(user._id);
-  }
-
-  invitation.status = "accepted";
-  invitation.acceptedBy = user._id;
-  invitation.acceptedAt = new Date();
-
-  await project.save();
 
   await recordActivity({
     projectId: project._id,

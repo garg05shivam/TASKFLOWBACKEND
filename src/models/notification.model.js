@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["member_invite", "comment", "task_due", "chat", "activity"],
+      enum: ["member_invite", "comment", "task_due", "chat", "activity", "task_assign"],
       required: true,
     },
     message: {

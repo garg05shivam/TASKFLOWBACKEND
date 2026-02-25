@@ -6,6 +6,7 @@ const validate = require("../middlewares/validation.middleware");
 const {
   acceptInvitation,
   addProjectMember,
+  clearAllNotifications,
   createTaskComment,
   getNotifications,
   getProjectActivity,
@@ -49,6 +50,7 @@ router.get("/projects/:projectId/chat", projectIdValidation, validate, listProje
 router.post("/projects/:projectId/chat", messageValidation, validate, sendProjectMessage);
 
 router.get("/notifications", getNotifications);
+router.delete("/notifications", clearAllNotifications);
 router.patch("/notifications/:id/read", notificationIdValidation, validate, markNotificationRead);
 
 module.exports = router;

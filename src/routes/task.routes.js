@@ -49,7 +49,9 @@ const {
 } = require("../utils/task.validation");
 
 const {
+  complete,
   create,
+  getAnalytics,
   getOne,
   getAll,
   update,
@@ -61,12 +63,16 @@ router.post("/", protect, createTaskValidation, validate, create);
 
 // Get Tasks (with filtering + pagination)
 router.get("/", protect, taskQueryValidation, validate, getAll);
+router.get("/analytics", protect, getAnalytics);
 
 // Get single task
 router.get("/:id", protect, taskIdValidation, validate, getOne);
 
 // Update Task
 router.put("/:id", protect, updateTaskValidation, validate, update);
+
+// Assigned user marks task done (auto-remove)
+router.post("/:id/complete", protect, taskIdValidation, validate, complete);
 
 // Delete Task
 router.delete("/:id", protect, taskIdValidation, validate, remove);

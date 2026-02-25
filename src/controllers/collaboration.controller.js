@@ -99,10 +99,20 @@ const markNotificationRead = async (req, res, next) => {
   }
 };
 
+const clearAllNotifications = async (req, res, next) => {
+  try {
+    const result = await collaborationService.clearAllNotifications(req.user._id);
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   acceptInvitation,
   addProjectMember,
   createTaskComment,
+  clearAllNotifications,
   getNotifications,
   getProjectActivity,
   getProjectMembers,

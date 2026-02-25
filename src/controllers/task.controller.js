@@ -62,8 +62,34 @@ const remove = async (req, res, next) => {
   }
 };
 
+const getAnalytics = async (req, res, next) => {
+  try {
+    const analytics = await taskService.getDashboardAnalytics(req.user);
+    res.status(200).json({
+      success: true,
+      analytics,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const complete = async (req, res, next) => {
+  try {
+    const result = await taskService.completeTaskByAssignee(req.params.id, req.user);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  complete,
   create,
+  getAnalytics,
   getOne,
   getAll,
   update,

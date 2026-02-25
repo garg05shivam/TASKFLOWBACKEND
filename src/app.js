@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const connectDB = require("./config/db");
 const sanitizeRequest = require("./middlewares/sanitize.middleware");
+const { startTaskReminderWorker } = require("./services/reminder.service");
 
 require("dotenv").config();
 
@@ -11,6 +12,9 @@ const app = express();
 
 // DB connection
 connectDB();
+if (process.env.NODE_ENV !== "test" && process.env.ENABLE_TASK_REMINDERS !== "false") {
+  startTaskReminderWorker();
+}
 
 const allowedOrigins = [process.env.CLIENT_URL, process.env.CLIENT_URL_2].filter(Boolean);
 
@@ -33,7 +37,7 @@ app.use(sanitizeRequest);
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
 });
 app.use(limiter);
 

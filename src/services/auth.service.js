@@ -1,4 +1,5 @@
 const User = require("../models/user.model");
+const Project = require("../models/project.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Otp = require("../models/otp.model");
@@ -6,10 +7,59 @@ const generateOtp = require("../utils/generateOtp");
 const { sendOtpEmail } = require("./email.service");
 const AppError = require("../utils/appError");
 
+const ALLOWED_SIGNUP_ROLES = new Set(["user", "admin"]);
+
+const autoAcceptInvitesForUser = async (user) => {
+  const normalizedEmail = String(user?.email || "").trim().toLowerCase();
+  if (!normalizedEmail) return;
+
+  const now = new Date();
+  const projects = await Project.find({
+    invitations: {
+      $elemMatch: {
+        email: normalizedEmail,
+        status: "pending",
+        expiresAt: { $gte: now },
+      },
+    },
+  }).select("_id invitations members");
+
+  if (!projects.length) return;
+
+  for (const project of projects) {
+    let changed = false;
+
+    project.members = project.members || [];
+    const memberIds = new Set(project.members.map((id) => String(id)));
+    if (!memberIds.has(String(user._id))) {
+      project.members.push(user._id);
+      changed = true;
+    }
+
+    (project.invitations || []).forEach((invitation) => {
+      const inviteEmail = String(invitation.email || "").trim().toLowerCase();
+      const isPending = invitation.status === "pending";
+      const isValid = invitation.expiresAt && new Date(invitation.expiresAt).getTime() >= now.getTime();
+
+      if (inviteEmail === normalizedEmail && isPending && isValid) {
+        invitation.status = "accepted";
+        invitation.acceptedBy = user._id;
+        invitation.acceptedAt = now;
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      await project.save();
+    }
+  }
+};
 
 // REGISTER USER
 const registerUser = async (data) => {
   const { name, email, password } = data;
+  const requestedRole = String(data.role || "user").trim().toLowerCase();
+  const role = ALLOWED_SIGNUP_ROLES.has(requestedRole) ? requestedRole : "user";
   const normalizedEmail = email.trim().toLowerCase();
 
   const existingUser = await User.findOne({ email: normalizedEmail });
@@ -38,6 +88,7 @@ const registerUser = async (data) => {
     name,
     email: normalizedEmail,
     password: hashedPassword,
+    role,
   });
 
   const otp = generateOtp();
@@ -61,8 +112,7 @@ const registerUser = async (data) => {
   };
 };
 
-
-// LOGIN USER 
+// LOGIN USER
 const loginUser = async (data) => {
   const { email, password } = data;
   const normalizedEmail = email.trim().toLowerCase();
@@ -81,8 +131,16 @@ const loginUser = async (data) => {
     throw new AppError("Please verify your email first", 401);
   }
 
+  const normalizedRole = user.role === "admin" ? "admin" : "user";
+  if (user.role !== normalizedRole) {
+    user.role = normalizedRole;
+    await user.save();
+  }
+
+  await autoAcceptInvitesForUser(user);
+
   const token = jwt.sign(
-    { id: user._id, role: user.role },
+    { id: user._id, role: normalizedRole },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE }
   );
@@ -90,8 +148,7 @@ const loginUser = async (data) => {
   return { user, token };
 };
 
-
-//  VERIFY OTP 
+// VERIFY OTP
 const verifyOtp = async (data) => {
   const { email, otp } = data;
   const normalizedEmail = email.trim().toLowerCase();
@@ -151,7 +208,6 @@ const resendOtp = async (data) => {
     message: "New OTP sent to email.",
   };
 };
-
 
 module.exports = {
   registerUser,

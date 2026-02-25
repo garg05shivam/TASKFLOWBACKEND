@@ -1,7 +1,17 @@
+const mongoose = require("mongoose");
 const Activity = require("../models/activity.model");
 const Notification = require("../models/notification.model");
 const Project = require("../models/project.model");
 const AppError = require("../utils/appError");
+
+const toIdString = (value) => {
+  if (!value) return "";
+  const raw = value._id || value.id || value;
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (raw.toString) return raw.toString();
+  return String(raw);
+};
 
 const getProjectOrThrow = async (projectId) => {
   const project = await Project.findById(projectId).populate("owner", "name email");
@@ -13,10 +23,13 @@ const getProjectOrThrow = async (projectId) => {
 
 const canAccessProject = (project, user) => {
   if (!project || !user) return false;
-    if (String(project.owner?._id || project.owner) === String(user._id)) return true;
+  if (toIdString(project.owner) === toIdString(user._id)) return true;
 
-  const memberIds = Array.isArray(project.members) ? project.members.map((id) => String(id)) : [];
-  return memberIds.includes(String(user._id));
+  const memberIds = Array.isArray(project.members)
+    ? project.members.map((member) => toIdString(member)).filter(Boolean)
+    : [];
+
+  return memberIds.includes(toIdString(user._id));
 };
 
 const assertProjectAccess = async (projectId, user) => {
@@ -28,7 +41,7 @@ const assertProjectAccess = async (projectId, user) => {
 };
 
 const isProjectManager = (project, user) => {
-  return user.role === "admin" && String(project.owner?._id || project.owner) === String(user._id);
+  return user.role === "admin" && toIdString(project.owner) === toIdString(user._id);
 };
 
 const recordActivity = async ({ projectId, actorId, action, entityType, entityId = "", metadata = {} }) => {
@@ -43,7 +56,14 @@ const recordActivity = async ({ projectId, actorId, action, entityType, entityId
 };
 
 const notifyUsers = async ({ userIds, projectId, type, message, metadata = {} }) => {
-  const unique = [...new Set((userIds || []).map((id) => String(id)).filter(Boolean))];
+  const unique = [
+    ...new Set(
+      (userIds || [])
+        .map((id) => toIdString(id))
+        .filter((id) => Boolean(id) && mongoose.Types.ObjectId.isValid(id))
+    ),
+  ];
+
   if (!unique.length) return;
 
   const docs = unique.map((userId) => ({
@@ -59,11 +79,11 @@ const notifyUsers = async ({ userIds, projectId, type, message, metadata = {} })
 
 const projectAudienceUserIds = (project) => {
   const ids = [];
-  if (project.owner) ids.push(String(project.owner._id || project.owner));
+  if (project.owner) ids.push(toIdString(project.owner));
   if (Array.isArray(project.members)) {
-    project.members.forEach((id) => ids.push(String(id)));
+    project.members.forEach((member) => ids.push(toIdString(member)));
   }
-  return [...new Set(ids)];
+  return [...new Set(ids.filter(Boolean))];
 };
 
 module.exports = {
@@ -75,6 +95,3 @@ module.exports = {
   projectAudienceUserIds,
   recordActivity,
 };
-
-
-
