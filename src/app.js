@@ -56,6 +56,9 @@ app.use("/api/tasks", taskRoutes);
 const collaborationRoutes = require("./routes/collaboration.routes");
 app.use("/api/collaboration", collaborationRoutes);
 
+const adminRoutes = require("./routes/admin.routes");
+app.use("/api/admin", adminRoutes);
+
 const { swaggerUi, specs } = require("./config/swagger");
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 

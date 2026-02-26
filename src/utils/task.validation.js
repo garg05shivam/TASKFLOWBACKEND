@@ -14,6 +14,12 @@ const attachmentValidation = body("attachments")
 const createTaskValidation = [
   body("title").notEmpty().withMessage("Task title is required"),
   body("project").isMongoId().withMessage("Invalid project ID"),
+  body("priority")
+    .optional()
+    .isIn(["low", "medium", "high"])
+    .withMessage("Invalid task priority"),
+  body("labels").optional().isArray().withMessage("labels must be an array"),
+  body("labels.*").optional().isString().withMessage("Each label must be a string"),
   body("assignedTo").optional({ nullable: true }).isMongoId().withMessage("assignedTo must be a valid user ID"),
   body("dueDate").optional({ nullable: true }).isISO8601().withMessage("dueDate must be a valid date"),
   attachmentValidation,
@@ -32,6 +38,12 @@ const updateTaskValidation = [
     .optional()
     .isIn(["todo", "in-progress", "done"])
     .withMessage("Invalid task status"),
+  body("priority")
+    .optional()
+    .isIn(["low", "medium", "high"])
+    .withMessage("Invalid task priority"),
+  body("labels").optional().isArray().withMessage("labels must be an array"),
+  body("labels.*").optional().isString().withMessage("Each label must be a string"),
   body("assignedTo").optional({ nullable: true }).isMongoId().withMessage("assignedTo must be a valid user ID"),
   body("dueDate").optional({ nullable: true }).isISO8601().withMessage("dueDate must be a valid date"),
   attachmentValidation,
@@ -64,6 +76,11 @@ const myAssignedTaskQueryValidation = [
     .optional()
     .isIn(["todo", "in-progress", "done"])
     .withMessage("Invalid task status"),
+  query("priority")
+    .optional()
+    .isIn(["low", "medium", "high"])
+    .withMessage("Invalid task priority"),
+  query("label").optional().isString().withMessage("label must be a string"),
   query("page").optional().isInt({ min: 1 }).withMessage("Page must be a positive integer"),
   query("limit")
     .optional()

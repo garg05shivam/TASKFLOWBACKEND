@@ -131,7 +131,7 @@ const loginUser = async (data) => {
     throw new AppError("Please verify your email first", 401);
   }
 
-  const normalizedRole = user.role === "admin" ? "admin" : "user";
+  const normalizedRole = user.role === "super_admin" ? "super_admin" : user.role === "admin" ? "admin" : "user";
   if (user.role !== normalizedRole) {
     user.role = normalizedRole;
     await user.save();

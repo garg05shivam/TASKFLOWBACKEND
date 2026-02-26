@@ -11,6 +11,10 @@ const {
 } = require("./collaboration.service");
 
 const getAccessibleProjectIdsForAnalytics = async (user) => {
+  if (user.role === "super_admin") {
+    return await Project.distinct("_id", {});
+  }
+
   if (user.role === "user") {
     return await Task.distinct("project", { assignedTo: user._id });
   }
@@ -78,11 +82,16 @@ const createTask = async (data, user) => {
   }
 
   const assignee = normalizeAssignee(project, data.assignedTo);
+  const normalizedLabels = Array.isArray(data.labels)
+    ? [...new Set(data.labels.map((item) => String(item || "").trim()).filter(Boolean))]
+    : [];
 
   const task = await Task.create({
     title: data.title,
     description: data.description,
     project: data.project,
+    priority: data.priority || "medium",
+    labels: normalizedLabels,
     dueDate: data.dueDate || null,
     assignedTo: assignee.hasValue ? assignee.value : null,
     attachments: Array.isArray(data.attachments) ? data.attachments : [],
@@ -119,7 +128,7 @@ const createTask = async (data, user) => {
 };
 
 const getTasks = async (query, user) => {
-  const { project, assignedTo, status, page = 1, limit = 5, search } = query;
+  const { project, assignedTo, status, priority, label, page = 1, limit = 5, search } = query;
 
   const projectData = await Project.findById(project).populate("owner members", "name email role");
 
@@ -137,6 +146,12 @@ const getTasks = async (query, user) => {
 
   if (status) {
     filter.status = status;
+  }
+  if (priority) {
+    filter.priority = priority;
+  }
+  if (label) {
+    filter.labels = { $in: [String(label).trim()] };
   }
 
   if (user.role === "user") {
@@ -193,6 +208,12 @@ const updateTask = async (id, data, user) => {
   if (data.title !== undefined) task.title = data.title;
   if (data.description !== undefined) task.description = data.description;
   if (data.status !== undefined) task.status = data.status;
+  if (data.priority !== undefined) task.priority = data.priority;
+  if (data.labels !== undefined) {
+    task.labels = Array.isArray(data.labels)
+      ? [...new Set(data.labels.map((item) => String(item || "").trim()).filter(Boolean))]
+      : [];
+  }
   if (data.dueDate !== undefined) task.dueDate = data.dueDate || null;
   if (Array.isArray(data.attachments)) task.attachments = data.attachments;
 
@@ -336,6 +357,45 @@ const completeTaskByAssignee = async (id, user) => {
 };
 
 const getDashboardAnalytics = async (user) => {
+  if (user.role === "user") {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - 6);
+
+    const completedThisWeek = await Activity.countDocuments({
+      action: "completed task",
+      actor: user._id,
+      createdAt: { $gte: weekStart, $lte: now },
+    });
+
+    const overdueCount = await Task.countDocuments({
+      assignedTo: user._id,
+      status: { $ne: "done" },
+      dueDate: { $ne: null, $lt: now },
+    });
+
+    const openTasks = await Task.countDocuments({
+      assignedTo: user._id,
+      status: { $ne: "done" },
+    });
+
+    return {
+      completedThisWeek,
+      overdueCount,
+      assigneeWorkload: openTasks
+        ? [
+            {
+              assigneeId: user._id,
+              name: user.name,
+              email: user.email,
+              openTasks,
+            },
+          ]
+        : [],
+    };
+  }
+
   const projectIds = await getAccessibleProjectIdsForAnalytics(user);
   if (!projectIds.length) {
     return {
