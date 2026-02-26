@@ -131,6 +131,10 @@ const loginUser = async (data) => {
     throw new AppError("Please verify your email first", 401);
   }
 
+  if (user.isActive === false) {
+    throw new AppError("Account is deactivated. Contact super admin.", 403);
+  }
+
   const normalizedRole = user.role === "super_admin" ? "super_admin" : user.role === "admin" ? "admin" : "user";
   if (user.role !== normalizedRole) {
     user.role = normalizedRole;

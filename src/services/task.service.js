@@ -10,6 +10,27 @@ const {
   recordActivity,
 } = require("./collaboration.service");
 
+const buildLast7DayBuckets = () => {
+  const now = new Date();
+  const buckets = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    buckets.push({ key: iso, label: d.toLocaleDateString(undefined, { weekday: "short" }), value: 0 });
+  }
+  return buckets;
+};
+
+const toCountMap = (rows) => {
+  const map = {};
+  (rows || []).forEach((row) => {
+    map[row._id] = row.count;
+  });
+  return map;
+};
+
 const getAccessibleProjectIdsForAnalytics = async (user) => {
   if (user.role === "super_admin") {
     return await Project.distinct("_id", {});
@@ -380,6 +401,40 @@ const getDashboardAnalytics = async (user) => {
       status: { $ne: "done" },
     });
 
+    const [statusRows, priorityRows, trendRows] = await Promise.all([
+      Task.aggregate([
+        { $match: { assignedTo: user._id } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      Task.aggregate([
+        { $match: { assignedTo: user._id } },
+        { $group: { _id: "$priority", count: { $sum: 1 } } },
+      ]),
+      Activity.aggregate([
+        {
+          $match: {
+            actor: user._id,
+            action: "completed task",
+            createdAt: { $gte: weekStart, $lte: now },
+          },
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const statusMap = toCountMap(statusRows);
+    const priorityMap = toCountMap(priorityRows);
+    const trendMap = toCountMap(trendRows);
+    const completedTrend7d = buildLast7DayBuckets().map((item) => ({
+      label: item.label,
+      value: trendMap[item.key] || 0,
+    }));
+
     return {
       completedThisWeek,
       overdueCount,
@@ -393,6 +448,17 @@ const getDashboardAnalytics = async (user) => {
             },
           ]
         : [],
+      tasksByStatus: {
+        todo: statusMap.todo || 0,
+        "in-progress": statusMap["in-progress"] || 0,
+        done: statusMap.done || 0,
+      },
+      tasksByPriority: {
+        low: priorityMap.low || 0,
+        medium: priorityMap.medium || 0,
+        high: priorityMap.high || 0,
+      },
+      completedTrend7d,
     };
   }
 
@@ -410,58 +476,101 @@ const getDashboardAnalytics = async (user) => {
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(weekStart.getDate() - 6);
 
-  const completedThisWeek = await Activity.countDocuments({
-    project: { $in: projectIds },
-    action: "completed task",
-    createdAt: { $gte: weekStart, $lte: now },
-  });
-
-  const overdueCount = await Task.countDocuments({
-    project: { $in: projectIds },
-    status: { $ne: "done" },
-    dueDate: { $ne: null, $lt: now },
-  });
-
-  const workloadRows = await Task.aggregate([
-    {
-      $match: {
+  const [completedThisWeek, overdueCount, workloadRows, statusRows, priorityRows, trendRows] =
+    await Promise.all([
+      Activity.countDocuments({
+        project: { $in: projectIds },
+        action: "completed task",
+        createdAt: { $gte: weekStart, $lte: now },
+      }),
+      Task.countDocuments({
         project: { $in: projectIds },
         status: { $ne: "done" },
-        assignedTo: { $ne: null },
-      },
-    },
-    {
-      $group: {
-        _id: "$assignedTo",
-        openTasks: { $sum: 1 },
-      },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "_id",
-        foreignField: "_id",
-        as: "assignee",
-      },
-    },
-    { $unwind: "$assignee" },
-    { $sort: { openTasks: -1 } },
-    { $limit: 20 },
-    {
-      $project: {
-        _id: 0,
-        assigneeId: "$_id",
-        name: "$assignee.name",
-        email: "$assignee.email",
-        openTasks: 1,
-      },
-    },
-  ]);
+        dueDate: { $ne: null, $lt: now },
+      }),
+      Task.aggregate([
+        {
+          $match: {
+            project: { $in: projectIds },
+            status: { $ne: "done" },
+            assignedTo: { $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: "$assignedTo",
+            openTasks: { $sum: 1 },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "assignee",
+          },
+        },
+        { $unwind: "$assignee" },
+        { $sort: { openTasks: -1 } },
+        { $limit: 20 },
+        {
+          $project: {
+            _id: 0,
+            assigneeId: "$_id",
+            name: "$assignee.name",
+            email: "$assignee.email",
+            openTasks: 1,
+          },
+        },
+      ]),
+      Task.aggregate([
+        { $match: { project: { $in: projectIds } } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      Task.aggregate([
+        { $match: { project: { $in: projectIds } } },
+        { $group: { _id: "$priority", count: { $sum: 1 } } },
+      ]),
+      Activity.aggregate([
+        {
+          $match: {
+            project: { $in: projectIds },
+            action: "completed task",
+            createdAt: { $gte: weekStart, $lte: now },
+          },
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+  const statusMap = toCountMap(statusRows);
+  const priorityMap = toCountMap(priorityRows);
+  const trendMap = toCountMap(trendRows);
+  const completedTrend7d = buildLast7DayBuckets().map((item) => ({
+    label: item.label,
+    value: trendMap[item.key] || 0,
+  }));
 
   return {
     completedThisWeek,
     overdueCount,
     assigneeWorkload: workloadRows,
+    tasksByStatus: {
+      todo: statusMap.todo || 0,
+      "in-progress": statusMap["in-progress"] || 0,
+      done: statusMap.done || 0,
+    },
+    tasksByPriority: {
+      low: priorityMap.low || 0,
+      medium: priorityMap.medium || 0,
+      high: priorityMap.high || 0,
+    },
+    completedTrend7d,
   };
 };
 
